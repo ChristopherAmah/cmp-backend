@@ -29,6 +29,38 @@ export function canTransitionStatus(currentStatus, newStatus) {
 }
 
 /**
+ * Contract lifecycle helpers based on actual expiration dates
+ */
+export function getContractExpirationDate(contract) {
+  const expirationDate = contract?.timeline?.expirationDate;
+  if (!expirationDate) return null;
+
+  const parsedDate = new Date(expirationDate);
+  return Number.isNaN(parsedDate.getTime()) ? null : parsedDate;
+}
+
+export function isContractExpired(contract, now = new Date()) {
+  const expirationDate = getContractExpirationDate(contract);
+  if (!expirationDate) return false;
+
+  return expirationDate < now || contract?.status === "expired";
+}
+
+export function isContractExpiringSoon(
+  contract,
+  now = new Date(),
+  daysAhead = 30
+) {
+  const expirationDate = getContractExpirationDate(contract);
+  if (!expirationDate) return false;
+
+  const msUntilExpiration = expirationDate.getTime() - now.getTime();
+  const warningWindowMs = daysAhead * 24 * 60 * 60 * 1000;
+
+  return msUntilExpiration > 0 && msUntilExpiration <= warningWindowMs;
+}
+
+/**
  * Build query filters for contracts
  */
 export function buildContractQuery(filters = {}) {
@@ -112,14 +144,15 @@ export function buildContractQuery(filters = {}) {
  */
 export async function calculateContractMetrics(filters = {}) {
   const query = buildContractQuery(filters);
+  const now = new Date();
 
   const [
     total,
     byStatus,
     byCategory,
     byPriority,
-    expiringSoon,
     recentlySigned,
+    matchingContracts,
   ] = await Promise.all([
     ContractV3.countDocuments(query),
     ContractV3.aggregate([
@@ -136,26 +169,33 @@ export async function calculateContractMetrics(filters = {}) {
     ]),
     ContractV3.countDocuments({
       ...query,
-      "timeline.expirationDate": {
-        $gte: new Date(),
-        $lte: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
-      },
-      status: "active",
-    }),
-    ContractV3.countDocuments({
-      ...query,
       "timeline.signedDate": {
         $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // Last 30 days
       },
     }),
+    ContractV3.find(query)
+      .select("status timeline.expirationDate")
+      .lean(),
   ]);
+
+  const statusSummary = byStatus.reduce((acc, item) => {
+    acc[item._id] = item.count;
+    return acc;
+  }, {});
+
+  const expiredContracts = matchingContracts.filter((contract) =>
+    isContractExpired(contract, now)
+  ).length;
+
+  const expiringSoon = matchingContracts.filter((contract) =>
+    isContractExpiringSoon(contract, now, 30)
+  ).length;
+
+  statusSummary.expired = expiredContracts;
 
   return {
     total,
-    byStatus: byStatus.reduce((acc, item) => {
-      acc[item._id] = item.count;
-      return acc;
-    }, {}),
+    byStatus: statusSummary,
     byCategory: byCategory.reduce((acc, item) => {
       acc[item._id] = item.count;
       return acc;
