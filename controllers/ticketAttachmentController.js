@@ -59,7 +59,19 @@ export const downloadTicketAttachment = async (req, res) => {
     const attachment = await TicketAttachment.findOne({ _id: req.params.attachmentId, ticket: ticket._id });
     if (!attachment) return res.status(404).json({ status: "error", message: "Attachment not found" });
 
-    res.redirect(attachment.cloudinaryUrl);
+    const upstreamResponse = await fetch(attachment.cloudinaryUrl);
+    if (!upstreamResponse.ok) {
+      return res.status(502).json({ status: "error", message: "Stored attachment could not be retrieved" });
+    }
+
+    const fileBuffer = Buffer.from(await upstreamResponse.arrayBuffer());
+    const safeFileName = attachment.fileName.replace(/[\r\n"\\]/g, "_");
+    res.set({
+      "Content-Type": attachment.fileType || "application/octet-stream",
+      "Content-Length": fileBuffer.length,
+      "Content-Disposition": `attachment; filename="${safeFileName}"`,
+    });
+    res.send(fileBuffer);
   } catch (error) {
     res.status(500).json({ status: "error", message: error.message });
   }
