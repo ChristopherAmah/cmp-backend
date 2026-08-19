@@ -1,6 +1,6 @@
 import express from 'express';
 import { protect } from '../middleware/auth.js';
-import { getTickets, createTicket } from '../controllers/ticketController.js';
+import { getTickets, createTicket, updateTicket } from '../controllers/ticketController.js';
 import ticketCommentsRouter from "./ticketComments.js";
 
 const router = express.Router();
@@ -10,6 +10,7 @@ router.use(protect);
 
 router.get('/', getTickets);
 router.post('/', createTicket);
+router.patch('/:ticketId', updateTicket);
 router.use('/:ticketId/comments', ticketCommentsRouter);
 
 export default router;

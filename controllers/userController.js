@@ -29,6 +29,35 @@ export const getAllUsers = async (req, res) => {
   }
 };
 
+export const getDevelopers = async (req, res) => {
+  try {
+    const allowedRoles = ["admin", "super_admin", "support_lead"];
+    const userRole = req.user?.role;
+
+    if (!allowedRoles.includes(userRole)) {
+      return res.status(403).json({
+        status: "error",
+        message: "Insufficient permissions",
+      });
+    }
+
+    const developers = await User.find({ role: "developer" })
+      .select("name email role")
+      .sort({ name: 1 })
+      .lean();
+
+    res.status(200).json({
+      status: "success",
+      data: developers,
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: "error",
+      message: error.message,
+    });
+  }
+};
+
 // Get user by ID
 export const getUserById = async (req, res) => {
   try {

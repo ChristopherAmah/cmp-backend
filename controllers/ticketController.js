@@ -36,6 +36,69 @@ export const getTickets = async (req, res) => {
   }
 };
 
+export const updateTicket = async (req, res) => {
+  try {
+    const { ticketId } = req.params;
+    const allowedUpdates = [
+      'subject',
+      'description',
+      'priority',
+      'category',
+      'status',
+      'assignedTo',
+      'customer',
+      'type',
+      'developer',
+      'contract',
+      'product',
+      'module',
+      'channel',
+      'sla',
+    ];
+
+    const updates = Object.keys(req.body || {}).reduce((acc, key) => {
+      if (allowedUpdates.includes(key)) {
+        acc[key] = req.body[key];
+      }
+      return acc;
+    }, {});
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'No valid ticket fields were provided for update.',
+      });
+    }
+
+    if (typeof updates.assignedTo === 'string' && updates.assignedTo.trim()) {
+      updates.developer = updates.assignedTo.trim();
+    }
+
+    const ticket = await Ticket.findOneAndUpdate(
+      { ticketId },
+      { $set: updates },
+      { new: true, runValidators: true }
+    );
+
+    if (!ticket) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Ticket not found',
+      });
+    }
+
+    res.status(200).json({
+      status: 'success',
+      data: formatTicketResponse(ticket),
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: 'error',
+      message: error.message,
+    });
+  }
+};
+
 export const createTicket = async (req, res) => {
   try {
     const {

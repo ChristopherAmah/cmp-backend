@@ -3,6 +3,7 @@ import { protect } from '../middleware/auth.js';
 import { authorize } from '../middleware/authorize.js';
 import {
   getAllUsers,
+  getDevelopers,
   getUserById,
   createUser,
   updateUser,
@@ -29,6 +30,13 @@ router.get(
     severity: 'low',
     getMetadata: (req) => ({ query: req.query }),
   })
+);
+
+// Get developer roster for ticket assignment
+router.get(
+  '/developers',
+  authorize('admin', 'super_admin', 'support_lead'),
+  getDevelopers
 );
 
 // Get user by ID
