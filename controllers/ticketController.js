@@ -29,27 +29,31 @@ const formatTicketResponse = (ticket) => ({
 });
 
 const notifyNewAssignees = async (ticket, previousAssignees) => {
-  const currentAssignees = asArray(ticket.assignedTo);
-  const previous = new Set(asArray(previousAssignees));
-  const newAssignees = currentAssignees.filter((name) => !previous.has(name));
-  if (!newAssignees.length) return;
+  try {
+    const currentAssignees = asArray(ticket.assignedTo);
+    const previous = new Set(asArray(previousAssignees));
+    const newAssignees = currentAssignees.filter((name) => !previous.has(name));
+    if (!newAssignees.length) return;
 
-  const developers = await User.find({
-    role: "developer",
-    name: { $in: newAssignees },
-  }).select("name email").lean();
+    const developers = await User.find({
+      role: "developer",
+      name: { $in: newAssignees },
+    }).select("name email").lean();
 
-  await Promise.allSettled(
-    developers.map((developer) =>
-      sendMail({
-        to: developer.email,
-        subject: `Ticket assigned: ${ticket.ticketId} - ${ticket.subject}`,
-        html: `<p>Hello ${developer.name},</p><p>You have been assigned to ticket <strong>${ticket.ticketId}</strong>: ${ticket.subject}.</p><p>Priority: ${ticket.priority}<br />Status: ${ticket.status}</p>`,
-      }).catch((error) =>
-        console.error(`Unable to email ${developer.email}:`, error.message),
+    await Promise.allSettled(
+      developers.map((developer) =>
+        sendMail({
+          to: developer.email,
+          subject: `Ticket assigned: ${ticket.ticketId} - ${ticket.subject}`,
+          html: `<p>Hello ${developer.name},</p><p>You have been assigned to ticket <strong>${ticket.ticketId}</strong>: ${ticket.subject}.</p><p>Priority: ${ticket.priority}<br />Status: ${ticket.status}</p>`,
+        }).catch((error) =>
+          console.error(`Unable to email ${developer.email}:`, error.message),
+        ),
       ),
-    ),
-  );
+    );
+  } catch (error) {
+    console.error("Ticket assignment email notification failed:", error.message);
+  }
 };
 
 export const getTickets = async (req, res) => {
@@ -60,6 +64,7 @@ export const getTickets = async (req, res) => {
       data: tickets.map(formatTicketResponse),
     });
   } catch (error) {
+    console.error("Unable to update ticket:", error);
     res.status(500).json({
       status: 'error',
       message: error.message,
