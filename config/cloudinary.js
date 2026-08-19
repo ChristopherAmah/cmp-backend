@@ -96,6 +96,40 @@ export const uploadPaymentPdf = multer({
   },
 });
 
+const ticketAttachmentStorage = new CloudinaryStorage({
+  cloudinary,
+  params: async (req) => ({
+    folder: `cmp-tickets/${req.params.ticketId || "uncategorized"}`,
+    resource_type: "raw",
+  }),
+});
+
+export const uploadTicketAttachment = multer({
+  storage: ticketAttachmentStorage,
+  limits: { fileSize: 25 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowedMimeTypes = [
+      "application/pdf",
+      "application/msword",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "application/vnd.ms-excel",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "text/csv",
+      "text/plain",
+      "application/json",
+      "application/zip",
+      "image/png",
+      "image/jpeg",
+      "image/webp",
+    ];
+    if (allowedMimeTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error("This file type is not supported for ticket attachments"), false);
+    }
+  },
+});
+
 const profilePictureStorage = new CloudinaryStorage({
   cloudinary: cloudinary,
   params: async (req, file) => {
