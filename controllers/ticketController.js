@@ -1,18 +1,25 @@
 import Ticket from '../models/Ticket.js';
 import Notification from "../models/Notification.js";
+import User from "../models/User.js";
+import { sendMail } from "../services/mailer.js";
+
+const asArray = (value) => {
+  if (Array.isArray(value)) return value.filter(Boolean).map(String);
+  return value ? [String(value)] : [];
+};
 
 const formatTicketResponse = (ticket) => ({
   id: ticket.ticketId,
   subject: ticket.subject,
   description: ticket.description,
   priority: ticket.priority,
-  category: ticket.category,
+  category: ticket.type || ticket.category,
   status: ticket.status,
-  assignedTo: ticket.assignedTo,
+  assignedTo: asArray(ticket.assignedTo),
   sla: ticket.sla,
   customer: ticket.customer,
   type: ticket.type,
-  developer: ticket.developer,
+  developer: asArray(ticket.developer || ticket.assignedTo),
   created: ticket.createdAt.toISOString().slice(0, 10),
   createdAt: ticket.createdAt.toISOString(),
   contract: ticket.contract,
@@ -20,6 +27,30 @@ const formatTicketResponse = (ticket) => ({
   module: ticket.module,
   channel: ticket.channel,
 });
+
+const notifyNewAssignees = async (ticket, previousAssignees) => {
+  const currentAssignees = asArray(ticket.assignedTo);
+  const previous = new Set(asArray(previousAssignees));
+  const newAssignees = currentAssignees.filter((name) => !previous.has(name));
+  if (!newAssignees.length) return;
+
+  const developers = await User.find({
+    role: "developer",
+    name: { $in: newAssignees },
+  }).select("name email").lean();
+
+  await Promise.allSettled(
+    developers.map((developer) =>
+      sendMail({
+        to: developer.email,
+        subject: `Ticket assigned: ${ticket.ticketId} - ${ticket.subject}`,
+        html: `<p>Hello ${developer.name},</p><p>You have been assigned to ticket <strong>${ticket.ticketId}</strong>: ${ticket.subject}.</p><p>Priority: ${ticket.priority}<br />Status: ${ticket.status}</p>`,
+      }).catch((error) =>
+        console.error(`Unable to email ${developer.email}:`, error.message),
+      ),
+    ),
+  );
+};
 
 export const getTickets = async (req, res) => {
   try {
@@ -70,8 +101,24 @@ export const updateTicket = async (req, res) => {
       });
     }
 
-    if (typeof updates.assignedTo === 'string' && updates.assignedTo.trim()) {
-      updates.developer = updates.assignedTo.trim();
+    if (Object.prototype.hasOwnProperty.call(updates, "assignedTo")) {
+      updates.assignedTo = asArray(updates.assignedTo);
+      updates.developer = updates.assignedTo;
+    } else if (Object.prototype.hasOwnProperty.call(updates, "developer")) {
+      updates.developer = asArray(updates.developer);
+      updates.assignedTo = updates.developer;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(updates, "type")) {
+      updates.category = updates.type;
+    }
+
+    const existingTicket = await Ticket.findOne({ ticketId });
+    if (!existingTicket) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Ticket not found',
+      });
     }
 
     const ticket = await Ticket.findOneAndUpdate(
@@ -80,12 +127,7 @@ export const updateTicket = async (req, res) => {
       { new: true, runValidators: true }
     );
 
-    if (!ticket) {
-      return res.status(404).json({
-        status: 'error',
-        message: 'Ticket not found',
-      });
-    }
+    await notifyNewAssignees(ticket, existingTicket.assignedTo);
 
     res.status(200).json({
       status: 'success',
@@ -142,18 +184,20 @@ export const createTicket = async (req, res) => {
       subject: ticketSubject,
       description,
       priority,
-      category,
+      category: type,
       status: status || 'Open',
-      assignedTo: assignedTo || null,
+      assignedTo: asArray(assignedTo || developer),
       customer: ticketCustomer,
       type,
-      developer: developer || null,
+      developer: asArray(developer || assignedTo),
       contract,
       product,
       module,
       channel,
       sla: sla || { label: 'New', state: 'ok' },
     });
+
+    await notifyNewAssignees(ticket, []);
 
     try {
       await Notification.create({

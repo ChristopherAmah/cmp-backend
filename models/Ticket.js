@@ -34,9 +34,8 @@ const ticketSchema = new mongoose.Schema(
       trim: true,
     },
     assignedTo: {
-      type: String,
-      trim: true,
-      default: null,
+      type: [String],
+      default: [],
     },
     customer: {
       type: String,
@@ -47,9 +46,8 @@ const ticketSchema = new mongoose.Schema(
       trim: true,
     },
     developer: {
-      type: String,
-      trim: true,
-      default: null,
+      type: [String],
+      default: [],
     },
     contract: {
       type: String,
