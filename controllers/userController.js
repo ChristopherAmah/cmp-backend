@@ -283,6 +283,49 @@ export const updateUser = async (req, res) => {
   }
 };
 
+export const changeOwnPassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body || {};
+
+    if (
+      typeof currentPassword !== "string" ||
+      typeof newPassword !== "string" ||
+      newPassword.length < 8 ||
+      newPassword.length > 128
+    ) {
+      return res.status(400).json({
+        status: "error",
+        message: "New password must be between 8 and 128 characters.",
+      });
+    }
+
+    if (currentPassword === newPassword) {
+      return res.status(400).json({
+        status: "error",
+        message: "New password must be different from your current password.",
+      });
+    }
+
+    const user = await User.findById(req.user._id).select("+password");
+    if (!user || !(await user.comparePassword(currentPassword))) {
+      return res.status(400).json({
+        status: "error",
+        message: "Current password is incorrect.",
+      });
+    }
+
+    user.password = newPassword;
+    await user.save();
+
+    res.status(200).json({
+      status: "success",
+      message: "Password changed successfully.",
+    });
+  } catch (error) {
+    res.status(500).json({ status: "error", message: error.message });
+  }
+};
+
 // Toggle user status (activate/deactivate)
 export const toggleUserStatus = async (req, res) => {
   try {

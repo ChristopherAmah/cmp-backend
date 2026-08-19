@@ -10,6 +10,7 @@ import {
   toggleUserStatus,
   deleteUser,
   uploadProfilePicture as uploadProfilePictureHandler,
+  changeOwnPassword,
 } from '../controllers/userController.js';
 import { uploadProfilePicture as uploadMiddleware } from '../config/cloudinary.js';
 import { auditLogMiddleware } from '../middleware/auditLog.js';
@@ -38,6 +39,8 @@ router.get(
   authorize('admin', 'super_admin', 'support_lead'),
   getDevelopers
 );
+
+router.patch('/change-password', changeOwnPassword);
 
 // Get user by ID
 router.get(
