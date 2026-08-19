@@ -72,7 +72,7 @@ export const getContracts = async (req, res) => {
 
     const contractIds = contracts.map((contract) => contract._id);
     const invoices = await InvoiceV3.find({ contract: { $in: contractIds } })
-      .select("_id contract totalAmount")
+      .select("_id contract totalAmount status")
       .lean();
     const invoiceIds = invoices.map((invoice) => invoice._id);
     const receipts = invoiceIds.length
@@ -85,22 +85,21 @@ export const getContracts = async (req, res) => {
       totals[invoiceId] = (totals[invoiceId] || 0) + (receipt.isReversal ? -receipt.amount : receipt.amount);
       return totals;
     }, {});
-    const paidByContract = invoices.reduce((totals, invoice) => {
-      const contractId = invoice.contract.toString();
-      totals[contractId] = (totals[contractId] || 0) + (paidByInvoice[invoice._id.toString()] || 0);
-      return totals;
-    }, {});
-
     // Add computed fields
     const contractsWithMeta = contracts.map((contract) => {
       const allowedTransitions = getAllowedStatusTransitions(contract.status);
-      const outstandingBalance = Math.max(
-        0,
-        (contract.pricing?.baseAmount || 0) - (paidByContract[contract._id.toString()] || 0),
+      const contractInvoices = invoices.filter(
+        (invoice) => invoice.contract.toString() === contract._id.toString(),
       );
+      const paymentDue = contractInvoices.some((invoice) => {
+        if (invoice.status === "voided") return false;
+        const paidAmount = Math.max(0, paidByInvoice[invoice._id.toString()] || 0);
+        return paidAmount < invoice.totalAmount;
+      });
+
       return {
         ...contract,
-        outstandingBalance,
+        paymentDue,
         allowedTransitions,
         canEdit: canEditContract(contract),
         canDelete: canDeleteContract(contract),
