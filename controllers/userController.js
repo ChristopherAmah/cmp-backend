@@ -67,15 +67,15 @@ export const getUserById = async (req, res) => {
   }
 };
 
-// Create user (admin+ only) - SIMPLEST APPROACH
+// Create user (super_admin only) - support leads cannot create users
 export const createUser = async (req, res) => {
   try {
     const userRole = req.user?.role;
 
-    if (userRole !== "admin" && userRole !== "super_admin") {
+    if (userRole !== "super_admin") {
       return res.status(403).json({
         status: "error",
-        message: "Only admins can create users",
+        message: "Only super_admin can create users",
       });
     }
 
