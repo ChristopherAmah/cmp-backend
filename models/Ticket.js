@@ -66,6 +66,12 @@ const ticketSchema = new mongoose.Schema(
       trim: true,
     },
     sla: {
+      targetHours: {
+        type: Number,
+        min: 1,
+        max: 8760,
+        default: null,
+      },
       label: {
         type: String,
         trim: true,

@@ -20,6 +20,7 @@ const formatTicketResponse = (ticket) => ({
   customer: ticket.customer,
   type: ticket.type,
   developer: asArray(ticket.developer || ticket.assignedTo),
+  slaTargetHours: ticket.sla?.targetHours ?? null,
   created: ticket.createdAt.toISOString().slice(0, 10),
   createdAt: ticket.createdAt.toISOString(),
   contract: ticket.contract,
@@ -165,6 +166,7 @@ export const createTicket = async (req, res) => {
       module,
       channel,
       sla,
+      slaTargetHours,
     } = req.body;
 
     const ticketSubject = title || subject;
@@ -183,6 +185,15 @@ export const createTicket = async (req, res) => {
       : 0;
     const nextNumber = lastNumber + 1;
     const ticketId = `TK-${String(nextNumber).padStart(5, '0')}`;
+    const parsedSlaTarget = Number(slaTargetHours ?? sla?.targetHours);
+    const canSetSlaTarget = ["admin", "super_admin", "support_lead"].includes(req.user?.role);
+
+    if (canSetSlaTarget && (!Number.isFinite(parsedSlaTarget) || parsedSlaTarget < 1 || parsedSlaTarget > 8760)) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'SLA target must be between 1 and 8760 hours.',
+      });
+    }
 
     const ticket = await Ticket.create({
       ticketId,
@@ -199,7 +210,14 @@ export const createTicket = async (req, res) => {
       product,
       module,
       channel,
-      sla: sla || { label: 'New', state: 'ok' },
+      sla: {
+        ...(sla || {}),
+        targetHours: Number.isFinite(parsedSlaTarget) && parsedSlaTarget >= 1 && parsedSlaTarget <= 8760
+          ? parsedSlaTarget
+          : null,
+        label: sla?.label || 'New',
+        state: sla?.state || 'ok',
+      },
     });
 
     await notifyNewAssignees(ticket, []);
