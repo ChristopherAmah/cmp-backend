@@ -132,7 +132,7 @@ export const updateTicket = async (req, res) => {
       { new: true, runValidators: true }
     );
 
-    await notifyNewAssignees(ticket, existingTicket.assignedTo);
+    void notifyNewAssignees(ticket, existingTicket.assignedTo);
 
     res.status(200).json({
       status: 'success',
