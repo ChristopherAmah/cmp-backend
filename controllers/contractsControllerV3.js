@@ -1,4 +1,6 @@
 import ContractV3 from "../models/ContractV3.js";
+import InvoiceV3 from "../models/InvoiceV3.js";
+import ReceiptV3 from "../models/ReceiptV3.js";
 import {
   buildContractQuery,
   calculateContractMetrics,
@@ -68,11 +70,37 @@ export const getContracts = async (req, res) => {
       ContractV3.countDocuments(query),
     ]);
 
+    const contractIds = contracts.map((contract) => contract._id);
+    const invoices = await InvoiceV3.find({ contract: { $in: contractIds } })
+      .select("_id contract totalAmount")
+      .lean();
+    const invoiceIds = invoices.map((invoice) => invoice._id);
+    const receipts = invoiceIds.length
+      ? await ReceiptV3.find({ invoice: { $in: invoiceIds } })
+          .select("invoice amount isReversal")
+          .lean()
+      : [];
+    const paidByInvoice = receipts.reduce((totals, receipt) => {
+      const invoiceId = receipt.invoice.toString();
+      totals[invoiceId] = (totals[invoiceId] || 0) + (receipt.isReversal ? -receipt.amount : receipt.amount);
+      return totals;
+    }, {});
+    const paidByContract = invoices.reduce((totals, invoice) => {
+      const contractId = invoice.contract.toString();
+      totals[contractId] = (totals[contractId] || 0) + (paidByInvoice[invoice._id.toString()] || 0);
+      return totals;
+    }, {});
+
     // Add computed fields
     const contractsWithMeta = contracts.map((contract) => {
       const allowedTransitions = getAllowedStatusTransitions(contract.status);
+      const outstandingBalance = Math.max(
+        0,
+        (contract.pricing?.baseAmount || 0) - (paidByContract[contract._id.toString()] || 0),
+      );
       return {
         ...contract,
+        outstandingBalance,
         allowedTransitions,
         canEdit: canEditContract(contract),
         canDelete: canDeleteContract(contract),

@@ -191,7 +191,7 @@ export const createTicket = async (req, res) => {
     if (canSetSlaTarget && (!Number.isFinite(parsedSlaTarget) || parsedSlaTarget < 1 || parsedSlaTarget > 8760)) {
       return res.status(400).json({
         status: 'error',
-        message: 'SLA target must be between 1 and 8760 hours.',
+        message: 'Time target must be between 1 and 8760 hours.',
       });
     }
 
