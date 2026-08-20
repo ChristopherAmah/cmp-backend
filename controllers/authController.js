@@ -1,5 +1,6 @@
 import User from "../models/User.js";
 import jwt from "jsonwebtoken";
+import crypto from "crypto";
 
 const generateToken = (id) => {
   if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
@@ -20,6 +21,45 @@ const isValidPassword = (password) =>
   typeof password === "string" &&
   password.length >= 8 &&
   password.length <= 128;
+
+export const completePasswordSetup = async (req, res) => {
+  try {
+    const { token, password } = req.body || {};
+    if (typeof token !== "string" || !isValidPassword(password)) {
+      return res.status(400).json({
+        status: "error",
+        message: "A valid setup token and password of at least 8 characters are required.",
+      });
+    }
+
+    const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+    const user = await User.findOne({
+      setupPasswordTokenHash: tokenHash,
+      setupPasswordExpiresAt: { $gt: new Date() },
+    }).select("+password +setupPasswordTokenHash +setupPasswordExpiresAt");
+
+    if (!user) {
+      return res.status(400).json({
+        status: "error",
+        message: "This password setup link is invalid or has expired.",
+      });
+    }
+
+    user.password = password;
+    user.mustChangePassword = false;
+    user.passwordChangedAt = new Date();
+    user.setupPasswordTokenHash = null;
+    user.setupPasswordExpiresAt = null;
+    await user.save();
+
+    res.status(200).json({
+      status: "success",
+      message: "Password set successfully. You can now sign in.",
+    });
+  } catch (error) {
+    res.status(500).json({ status: "error", message: error.message });
+  }
+};
 
 const isValidName = (name) =>
   typeof name === "string" &&
@@ -58,6 +98,8 @@ export const register = async (req, res) => {
       email,
       password,
       role: "user", // Default role
+      mustChangePassword: false,
+      passwordChangedAt: new Date(),
     });
 
     const token = generateToken(user._id);
@@ -79,6 +121,7 @@ export const register = async (req, res) => {
           name: user.name,
           email: user.email,
           role: user.role,
+          mustChangePassword: user.mustChangePassword,
         },
         token,
       },
@@ -138,6 +181,7 @@ export const login = async (req, res) => {
           name: user.name,
           email: user.email,
           role: user.role,
+          mustChangePassword: user.mustChangePassword,
         },
         token,
       },
@@ -177,6 +221,7 @@ export const getMe = async (req, res) => {
         email: user.email,
         role: user.role,
         profilePicture: user.profilePicture,
+        mustChangePassword: user.mustChangePassword,
       },
     },
   });

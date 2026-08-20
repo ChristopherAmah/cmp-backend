@@ -1,5 +1,5 @@
 import express from 'express';
-import { register, login, logout, getMe } from '../controllers/authController.js';
+import { register, login, logout, getMe, completePasswordSetup } from '../controllers/authController.js';
 import { protect } from '../middleware/auth.js';
 import { auditLogMiddleware } from '../middleware/auditLog.js';
 
@@ -28,6 +28,8 @@ router.post(
     severity: 'medium',
   })
 );
+
+router.post('/password-setup', completePasswordSetup);
 
 router.post(
   '/logout',

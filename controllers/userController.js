@@ -2,6 +2,8 @@ import User from "../models/User.js";
 import bcrypt from "bcryptjs";
 import cloudinary from "../config/cloudinary.js";
 import { logAction } from "../middleware/auditLog.js";
+import crypto from "crypto";
+import { sendMail } from "../services/mailer.js";
 
 // Get all users (admin+ only)
 export const getAllUsers = async (req, res) => {
@@ -108,13 +110,13 @@ export const createUser = async (req, res) => {
       });
     }
 
-    const { name, email, password, role } = req.body;
+    const { name, email, role } = req.body;
 
     // Validation
-    if (!name || !email || !password) {
+    if (!name || !email) {
       return res.status(400).json({
         status: "error",
-        message: "Name, email, and password are required",
+        message: "Name and email are required",
       });
     }
 
@@ -143,13 +145,30 @@ export const createUser = async (req, res) => {
       });
     }
 
-    // Create user
+    const setupToken = crypto.randomBytes(32).toString("hex");
+    const setupTokenHash = crypto
+      .createHash("sha256")
+      .update(setupToken)
+      .digest("hex");
+    const setupExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const unusablePassword = crypto.randomBytes(32).toString("hex");
+
     const user = await User.create({
       name,
       email: email.toLowerCase(),
-      password,
+      password: unusablePassword,
       role: role || "user",
+      mustChangePassword: true,
+      setupPasswordTokenHash: setupTokenHash,
+      setupPasswordExpiresAt: setupExpiresAt,
     });
+
+    const setupUrl = `${process.env.FRONTEND_URL || "http://localhost:5173"}/set-password?token=${setupToken}`;
+    void sendMail({
+      to: user.email,
+      subject: "Set up your Contract Management Portal account",
+      html: `<p>Hello ${user.name},</p><p>Your Contract Management Portal account has been created.</p><p><a href="${setupUrl}">Set your password</a></p><p>This link expires in 24 hours and can only be used once.</p>`,
+    }).catch((error) => console.error("Unable to send account setup email:", error.message));
 
     // Log audit action
     await logAction({
@@ -315,6 +334,10 @@ export const changeOwnPassword = async (req, res) => {
     }
 
     user.password = newPassword;
+    user.mustChangePassword = false;
+    user.passwordChangedAt = new Date();
+    user.setupPasswordTokenHash = null;
+    user.setupPasswordExpiresAt = null;
     await user.save();
 
     res.status(200).json({

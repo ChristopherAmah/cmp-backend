@@ -21,6 +21,24 @@ const userSchema = new mongoose.Schema(
       minlength: 6,
       select: false,
     },
+    mustChangePassword: {
+      type: Boolean,
+      default: false,
+    },
+    passwordChangedAt: {
+      type: Date,
+      default: null,
+    },
+    setupPasswordTokenHash: {
+      type: String,
+      select: false,
+      default: null,
+    },
+    setupPasswordExpiresAt: {
+      type: Date,
+      select: false,
+      default: null,
+    },
     role: {
       type: String,
       enum: ["super_admin", "admin", "support_lead", "developer", "user"],
