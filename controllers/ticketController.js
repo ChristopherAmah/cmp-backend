@@ -41,12 +41,16 @@ const notifyNewAssignees = async (ticket, previousAssignees) => {
       name: { $in: newAssignees },
     }).select("name email").lean();
 
+    const frontendUrl = (process.env.FRONTEND_URL || "http://localhost:5173").replace(/\/$/, "");
+    const ticketUrl = `${frontendUrl}/support?ticket=${encodeURIComponent(ticket.ticketId)}`;
+    const loginUrl = `${frontendUrl}/login?next=${encodeURIComponent(`/support?ticket=${ticket.ticketId}`)}`;
+
     await Promise.allSettled(
       developers.map((developer) =>
         sendMail({
           to: developer.email,
           subject: `Ticket assigned: ${ticket.ticketId} - ${ticket.subject}`,
-          html: `<p>Hello ${developer.name},</p><p>You have been assigned to ticket <strong>${ticket.ticketId}</strong>: ${ticket.subject}.</p><p>Priority: ${ticket.priority}<br />Status: ${ticket.status}</p>`,
+          html: `<p>Hello ${developer.name},</p><p>You have been assigned to ticket <strong>${ticket.ticketId}</strong>: ${ticket.subject}.</p><p>Priority: ${ticket.priority}<br />Status: ${ticket.status}</p><p><a href="${ticketUrl}">Open ticket ${ticket.ticketId}</a></p><p><a href="${loginUrl}">Log in to Contract Management Portal</a></p>`,
         }).catch((error) =>
           console.error(`Unable to email ${developer.email}:`, error.message),
         ),
