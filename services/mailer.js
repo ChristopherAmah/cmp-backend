@@ -1,39 +1,37 @@
-import nodemailer from "nodemailer";
+export const sendMail = async ({ to, cc, subject, html, attachments }) => {
+  const apiKey = process.env.RESEND_API_KEY || process.env.SMTP_PASS;
+  const from = process.env.MAIL_FROM;
 
-export const createTransporter = () => {
-  const host = process.env.SMTP_HOST;
-  const port = Number(process.env.SMTP_PORT || 587);
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
-
-  if (!host || !user || !pass) {
-    throw new Error(
-      "SMTP config missing: set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS"
-    );
+  if (!apiKey || !from) {
+    throw new Error("Email config missing: set RESEND_API_KEY and MAIL_FROM");
   }
 
-  return nodemailer.createTransport({
-    host,
-    port,
-    secure: port === 465,
-    auth: { user, pass },
-    connectionTimeout: 10000,
-    greetingTimeout: 10000,
-    socketTimeout: 15000,
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from,
+      to,
+      cc,
+      subject,
+      html,
+      attachments: attachments?.map(({ filename, content, contentType }) => ({
+        filename,
+        content: Buffer.isBuffer(content)
+          ? content.toString("base64")
+          : content,
+        content_type: contentType,
+      })),
+    }),
   });
-};
 
-export const sendMail = async ({ to, cc, subject, html, attachments }) => {
-  const from = process.env.MAIL_FROM || process.env.SMTP_USER;
+  const result = await response.json();
+  if (!response.ok) {
+    throw new Error(result.message || "Resend rejected the email request");
+  }
 
-  const transporter = createTransporter();
-
-  return transporter.sendMail({
-    from,
-    to,
-    cc,
-    subject,
-    html,
-    attachments,
-  });
+  return result;
 };
